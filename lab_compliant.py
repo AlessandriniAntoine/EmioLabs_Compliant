@@ -200,7 +200,6 @@ def createScene(rootnode):
     ##############################################################################
     # Emio Gui
     ##############################################################################
-
     # Open Loop
     if args.controller == "openloop":
         from scripts.openLoopController import OpenLoopController
@@ -213,7 +212,17 @@ def createScene(rootnode):
             leg, motor, markers, load,
             motorInit, motorMin, motorMax, float(args.motorCutoffFreq),
             int(args.order), int(args.useObserver)))
+    elif args.controller == "compliant":
+        from scripts.compliantController import CompliantController
+        rootnode.addObject(CompliantController(
+            leg, motor, markers, load,
+            motorInit, motorMin, motorMax, float(args.motorCutoffFreq),
+            int(args.order), int(args.useObserver)))
 
+
+    ##############################################################################
+    # Connection to real robot
+    ##############################################################################
     if args.connection:
         # Add RealSense camera tracker
         try:

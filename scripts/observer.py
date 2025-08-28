@@ -7,7 +7,7 @@ import control as ct
 ####################################################################################
 # Note: This is where you design the observer gain matrix L.
 ####################################################################################
-def design_observer(A, C):
+def design_observer(A, E, C):
     """
     Design an observer gain L such that the estimation error converges.
 
@@ -19,25 +19,29 @@ def design_observer(A, C):
     - L: np.ndarray, shape (nx, ny), observer gain matrix
     """
 
+    # Augmented State
+    Abar = np.block([[A, E], [np.zeros((E.shape[1], A.shape[0])), np.eye(E.shape[1])]])
+    Cbar = np.block([[C, np.zeros((C.shape[0], E.shape[1]))]])
+
     # === Step 0: Check the observability of the system ===
-    obsv_rank = np.linalg.matrix_rank(ct.obsv(A, C))
-    if obsv_rank != A.shape[0]:
-        raise ValueError(f"System is not observable: rank {obsv_rank}, expected {A.shape[0]}.")
+    obsv_rank = np.linalg.matrix_rank(ct.obsv(Abar, Cbar))
+    if obsv_rank != Abar.shape[0]:
+        raise ValueError(f"System is not observable: rank {obsv_rank}, expected {Abar.shape[0]}.")
 
     # === Step 1: Solve the dual control problem to get L ===
     # Observer design is dual: use A.T, C.T, Q, R
     # TODO: Compute observer gain L
-    Q = 1e2 * np.eye(A.shape[0])
-    R = 1e1 * np.eye(C.shape[0])
-    Lt, _, _ =  ct.dlqr(A.T, C.T, Q, R)
+    Q = np.diag(A.shape[0] * [1e2] + [1e4])
+    R = 1e1 * np.eye(Cbar.shape[0])
+    Lt, _, _ =  ct.dlqr(Abar.T, Cbar.T, Q, R)
     L = Lt.T
 
     # === Step 4: Compare eigenvalues ===
     # TODO: Compute the eigenvalues of the open-loop and observer systems
-    eig_open = np.linalg.eigvals(A)
+    eig_open = np.linalg.eigvals(Abar)
     print(f"Open-loop eigenvalue magnitudes: {np.abs(eig_open)}")
     # Display observer eigenvalues
-    eig_obs = np.linalg.eigvals(A - L @ C)
+    eig_obs = np.linalg.eigvals(Abar - L @ Cbar)
     print(f"Observer eigenvalue magnitudes: {np.abs(eig_obs)}")
     return L
 
@@ -67,10 +71,11 @@ def perform_observer_design():
         raise FileNotFoundError(f"Model file not found: {model_file}. Please run identification first.")
     model = np.load(model_file)
     A = model["stateMatrix"]
+    E = model["forceMatrix"]
     C = model["outputMatrix"]
 
     # Design observer
-    L = design_observer(A, C)
+    L = design_observer(A, E ,C)
 
     # Save observer
     np.savez(os.path.join(data_path, f"observer_order{args.order}.npz"),

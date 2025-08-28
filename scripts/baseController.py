@@ -32,7 +32,7 @@ class BaseController(Sofa.Core.Controller):
         self.root.VisualStyle.displayFlags.value = "showVisualModels showForceFields"
         self.force = self.load.addObject('ConstantForceField', name="User", indices=[0], showArrowSize=0.03)
         self.force.forces.value = [7 * [0.]]
-        self.maxforce = 100
+        self.maxforce = 40
 
         # GUI setup
         self.guiNode = self.root.addChild("guiNode")
@@ -70,6 +70,7 @@ class BaseController(Sofa.Core.Controller):
         self.lastLegPos = np.zeros_like(self.mo.position.value.copy())
         self.markersPos = np.zeros_like(self.markers.position.value.copy()[:, [1, 2]].reshape(-1, 1))
         self.currentMotorPos = np.zeros((1, ))
+        self.current_force = np.zeros((1, ))
 
         # states
         self.command = np.zeros((1, ))
@@ -83,6 +84,7 @@ class BaseController(Sofa.Core.Controller):
         self.legVelList = []
         self.markersPosList = []
         self.motorPosList = []
+        self.forceList = []
 
 
     def onAnimateBeginEvent(self, e):
@@ -133,6 +135,7 @@ class BaseController(Sofa.Core.Controller):
         markersPos = self.markers.position.value.copy()[:, [1, 2]].reshape(-1, 1)
         self.markersPos = markersPos - self.initialMarkersPos
         self.currentMotorPos = np.array([self.motor.JointActuator.value.value]) - self.motorInit
+        self.current_force = self.force.forces.value.flatten()[[2]]
 
 
     def execute_control_at_simu_frame(self):
@@ -142,7 +145,7 @@ class BaseController(Sofa.Core.Controller):
         self.motor.JointActuator.value.value = command[0] + self.motorInit
 
         self.force.forces = [[ 0, 0, self.guiNode.force.value*1e2, 0, 0, 0, 0]]
-        self.guiNode.force.value = 0
+        # self.guiNode.force.value = 0
 
     def execute_control_at_camera_frame(self):
        raise NotImplementedError("execute_control_at_camera_frame method must be implemented in the derived class.")
@@ -153,6 +156,7 @@ class BaseController(Sofa.Core.Controller):
         self.legPosList.append(self.legPos.copy())
         self.markersPosList.append(self.markersPos.copy())
         self.motorPosList.append(np.array([self.command]).reshape(-1, 1))
+        self.forceList.append(self.current_force)
 
 
     def save(self):

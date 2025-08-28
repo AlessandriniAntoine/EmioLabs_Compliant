@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 ####################################################################################
 # Note: This is where you implement the identification of the reduced linear model.
 ####################################################################################
-def identify_model(states, inputs, outputs, reduced_positions, r):
+def identify_model(states, inputs, outputs, forces, reduced_positions, r):
     """
     Identify the discrete-time state-space model from reduced data.
 
@@ -14,12 +14,14 @@ def identify_model(states, inputs, outputs, reduced_positions, r):
     - states: np.ndarray, shape (nx, L), reduced full states over time
     - inputs: np.ndarray, shape (nu, L), inputs over time
     - outputs: np.ndarray, shape (ny, L), outputs over time
+    - forces: np.ndarray, shape (nf, L), forces over time
     - reduced_positions: np.ndarray, shape (nr, L), reduced positions over time
     - r: int, reduction order (number of modes kept)
 
     Returns:
     - A: State matrix
     - B: Input matrix
+    - E: Force matrix
     - C: Output matrix
     """
 
@@ -27,16 +29,18 @@ def identify_model(states, inputs, outputs, reduced_positions, r):
     x_next = states[:, 1:]
     x_curr = states[:, :-1]
     u_curr = inputs[:, :-1]
+    f_curr = forces[:, :-1]
 
     # === Step 2: Compute state and input matrices using least-squares ===
     # Stack state and input to form [x; u]
     # TODO: Complete this part
-    state_input = np.vstack((x_curr, u_curr))  # Shape: (nx + nu, L - 1)
-    AB = x_next @ np.linalg.pinv(state_input)  # Shape: (nx, nx + nu)
+    state_input_force = np.vstack((x_curr, u_curr, f_curr))  # Shape: (nx + nu + nf, L - 1)
+    ABE = x_next @ np.linalg.pinv(state_input_force)  # Shape: (nx, nx + nu + nf)
 
     # Extract A and B from AB
-    A = AB[:, :states.shape[0]]  # State matrix A
-    B = AB[:, states.shape[0]:]  # Input matrix B
+    A = ABE[:, :states.shape[0]]  # State matrix A
+    B = ABE[:, states.shape[0]:states.shape[0] + inputs.shape[0]]  # Input matrix B
+    E = ABE[:, states.shape[0] + inputs.shape[0]:]  # Force matrix E
 
     # === Step 3: Compute output matrix C ===
     # C = [0  Cp] where Cp maps reduced positions to outputs
@@ -44,7 +48,7 @@ def identify_model(states, inputs, outputs, reduced_positions, r):
     Cp = outputs @ np.linalg.pinv(reduced_positions)  # Shape: (ny, np)
     C = np.hstack((np.zeros_like(Cp), Cp))  # Shape: (ny, nx)
 
-    return A, B, C
+    return A, B, E, C
 
 ####################################################################################
 # Note: The following code is provided and loads data, handles paths, and runs logic.
@@ -76,6 +80,7 @@ def perform_identification():
     states_full = np.vstack((legs_vel, legs_pos))  # Full state (v; p)
     outputs = data["markersPos"].T
     inputs = data["motorPos"].T
+    forces = data["force"].T
 
     # Load reduction matrix
     reduction_file = os.path.join(data_path, f"reduction_order{args.order}.npz")
@@ -90,17 +95,17 @@ def perform_identification():
     reduced_positions = T.T @ legs_pos
 
     # Identify the model
-    A, B, C = identify_model(reduced_states, inputs, outputs, reduced_positions, args.order)
+    A, B, E, C = identify_model(reduced_states, inputs, outputs, forces, reduced_positions, args.order)
 
     # Print dimensions
-    print(f"System matrices:\nA: {A.shape}, B: {B.shape}, C: {C.shape}")
+    print(f"System matrices:\nA: {A.shape}, B: {B.shape}, E: {E.shape}, C: {C.shape}")
 
     # === Optional: Predict and simulate model ===
     L = reduced_states.shape[1]
     nx = A.shape[0]
 
     # Prediction using known data
-    x_pred = A @ reduced_states + B @ inputs
+    x_pred = A @ reduced_states + B @ inputs + E @ forces
     y_pred = C @ x_pred
 
     # Simulation from initial condition
@@ -111,7 +116,8 @@ def perform_identification():
     Y_sim[:, 0] = (C @ x_sim)[:, 0]
     for k in range(1, L):
         u = inputs[:, k-1].reshape(-1, 1)
-        x_sim = A @ x_sim + B @ u
+        f = forces[:, k-1].reshape(-1, 1)
+        x_sim = A @ x_sim + B @ u + E @ f
         X_sim[:, k] = x_sim[:, 0]
         Y_sim[:, k] = (C @ x_sim)[:, 0]
 
@@ -140,6 +146,7 @@ def perform_identification():
     np.savez(os.path.join(data_path, f"model_order{args.order}.npz"),
              stateMatrix=A,
              inputMatrix=B,
+             forceMatrix=E,
              outputMatrix=C)
 
 # Optional SOFA interface

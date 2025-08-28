@@ -29,3 +29,4 @@ the <span style="color:grey">*grey mass*</span>, and two <span style="color:gree
 #include(assets/labs/EmioLabs_Compliant/sections/4_feedbackcontrol.md)
 #include(assets/labs/EmioLabs_Compliant/sections/5_observer.md)
 #include(assets/labs/EmioLabs_Compliant/sections/6_closedloopcontrol.md)
+#include(assets/labs/EmioLabs_Compliant/sections/7_compliantcontrol.md)

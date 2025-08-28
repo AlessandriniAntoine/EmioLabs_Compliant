@@ -4,7 +4,7 @@ from .baseController import *
 ControlMode = {"Open Loop": False, "State Feedback": True}
 
 
-class ClosedLoopController(BaseController):
+class CompliantController(BaseController):
     def __init__(self, leg, motor, markers, load, motorInit, motorMin, motorMax, cutoffFreq, order, use_observer=1):
         super().__init__(leg, motor, markers, load, motorInit, motorMin, motorMax, cutoffFreq)
 
@@ -25,6 +25,12 @@ class ClosedLoopController(BaseController):
 
 
     def setup_additional_variables(self, use_observer, order):
+
+        self.mass = 0.1
+        self.damping = 0.01
+        self.stiffness = 15.
+        self.compute_state_matrix()
+
         # Control and Observer data
         model = np.load(os.path.join(data_path, f"model_order{order}.npz"))
         self.A, self.B, self.E, self.C = model["stateMatrix"], model["inputMatrix"], model["forceMatrix"], model["outputMatrix"]
@@ -40,7 +46,8 @@ class ClosedLoopController(BaseController):
             self.R = reduction["reductionMatrix"]
 
         # additional states for closed-loop control
-        self.reference = np.zeros((self.B.shape[1], 1))
+        self.desired_pos = np.zeros((self.B.shape[1], 1))
+        self.reference_pos = np.zeros((2*self.B.shape[1], 1))
         self.observerState = np.zeros((self.A.shape[0], 1))
         self.observerForce = np.zeros((self.E.shape[1], 1))
         self.observerOutput = np.zeros((self.C.shape[0], 1))
@@ -70,17 +77,18 @@ class ClosedLoopController(BaseController):
 
 
         if self.guiNode.active.value:
-            self.reference = np.array([[self.guiNode.reference.value]])
+            self.desired_pos = np.array([[self.guiNode.desired_pos.value]])
             markersPos = self.markers.position.value.flatten()
-            self.refMo.position.value = np.array([[self.initRefMo[0], markersPos[1], self.initRefMo[2] + self.reference[0, 0]]])
+            self.refMo.position.value = np.array([[self.initRefMo[0], markersPos[1], self.initRefMo[2] + self.desired_pos[0, 0]]])
 
         # control
         if self.guiNode.controlMode.value == ControlMode["State Feedback"]:
             if not self.use_observer:
                 fullState = np.vstack([self.legVel, self.legPos])
                 state4Control = self.R.T @ fullState
-            desiredMotorPos = ( self.G @ self.reference - self.K @ state4Control).flatten()
+            desiredMotorPos = ( self.G @ self.reference_pos[[1]] - self.K @ state4Control).flatten()
             self.motor.position.value = desiredMotorPos[0]*1e2
+            self.reference_pos = self.A_ref @ self.reference_pos + self.B_ref @ self.desired_pos + self.E_ref @ self.observerForce
         else:
             desiredMotorPos = self.currentMotorPos.copy()
             if self.guiNode.active.value:
@@ -95,23 +103,26 @@ class ClosedLoopController(BaseController):
         super().execute_control_at_simu_frame()
         self.guiNode.output.value = self.markersPos[1, 0]
         self.guiNode.obsForce.value = self.observerForce[0, 0]*1e-2
+        self.guiNode.reference_pos.value = self.reference_pos[1, 0]
 
 
     def setup_additional_gui(self, use_observer):
         # Specific gui setup
         if use_observer:
             self.guiNode.addData(name="noise", type="float", value=0.)
-        self.guiNode.addData(name="reference", type="float", value=0.)
+        self.guiNode.addData(name="desired_pos", type="float", value=0.)
+        self.guiNode.addData(name="reference_pos", type="float", value=0.)
         self.guiNode.addData(name="output", type="float", value=0.)
         self.guiNode.addData(name="obsForce", type="float", value=0.)
         self.guiNode.addData(name="controlMode", type="bool", value=ControlMode["Open Loop"])
-        MyGui.MyRobotWindow.addSettingInGroup("Reference (mm)", self.guiNode.reference, -50, 50, "Control Law")
+        MyGui.MyRobotWindow.addSettingInGroup("Reference (mm)", self.guiNode.desired_pos, -50, 50, "Control Law")
         if use_observer:
             MyGui.MyRobotWindow.addSettingInGroup("Observer Noise (mm)", self.guiNode.noise, 0, 3, "Control Law")
         MyGui.MyRobotWindow.addSettingInGroup("Control Mode", self.guiNode.controlMode, 0, 1, "Buttons")
 
         # Plotting data
-        MyGui.PlottingWindow.addData("Reference", self.guiNode.reference)
+        MyGui.PlottingWindow.addData("Desired pos", self.guiNode.desired_pos)
+        MyGui.PlottingWindow.addData("Reference pos", self.guiNode.reference_pos)
         MyGui.PlottingWindow.addData("Output", self.guiNode.output)
         MyGui.PlottingWindow.addData("Force", self.guiNode.force)
         MyGui.PlottingWindow.addData("Obs force", self.guiNode.obsForce)
@@ -144,3 +155,13 @@ class ClosedLoopController(BaseController):
             commandMode=np.array(self.commandModeList).reshape(len(self.commandModeList), 1),
             fps=1 / self.root.dt.value,
         )
+
+    def compute_state_matrix(self):
+        dt = self.root.dt.value
+        m = np.array([[self.mass]])
+        d = np.array([[self.damping]])
+        s = np.array([[self.stiffness]])
+        alpha = np.linalg.inv(m + dt * d + dt**2 * s)
+        self.A_ref = np.block([[alpha @ m, -dt * alpha @ s], [dt * alpha @ m, np.eye(1) - (dt**2) * alpha * s]])
+        self.E_ref = np.block([[dt * alpha], [(dt**2) * alpha]])
+        self.B_ref = np.block([[dt*alpha@s], [(dt**2)*alpha@s]])

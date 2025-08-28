@@ -37,5 +37,6 @@ class OpenLoopController(BaseController):
             legPos=np.array(self.legPosList).reshape(len(self.legPosList), self.legPosList[0].shape[0]),
             markersPos=np.array(self.markersPosList).reshape(len(self.markersPosList), self.markersPosList[0].shape[0]),
             motorPos=np.array(self.motorPosList).reshape(len(self.motorPosList), self.motorPosList[0].shape[0]),
+            force=np.array(self.forceList).reshape(len(self.forceList), self.forceList[0].shape[0]),
             fps=1 / self.root.dt.value,
         )
