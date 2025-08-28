@@ -5,9 +5,8 @@ ControlMode = {"Open Loop": False, "State Feedback": True}
 
 
 class CompliantController(BaseController):
-    def __init__(self, leg, motor, markers, load, motorInit, motorMin, motorMax, cutoffFreq, order, use_observer=1):
+    def __init__(self, leg, motor, markers, load, motorInit, motorMin, motorMax, cutoffFreq, mass, damping, stiffness, order, use_observer=1):
         super().__init__(leg, motor, markers, load, motorInit, motorMin, motorMax, cutoffFreq)
-
 
         # add mechanical object for reference
         self.refMo = self.guiNode.addObject("MechanicalObject",
@@ -20,15 +19,18 @@ class CompliantController(BaseController):
             showColor=[0, 0, 1, 1]
         )
 
-        self.setup_additional_variables(use_observer, order)
+        self.setup_additional_variables(use_observer, order, mass, damping, stiffness)
         self.setup_additional_gui(use_observer)
 
 
-    def setup_additional_variables(self, use_observer, order):
+    def setup_additional_variables(self, use_observer, order, mass, damping, stiffness):
 
-        self.mass = 0.1
-        self.damping = 0.01
-        self.stiffness = 15.
+        self.mass = mass
+        self.damping = damping
+        self.stiffness = stiffness
+        self.mass_exponant=int(np.floor(np.log10(abs(self.mass))))-1
+        self.damping_exponant=int(np.floor(np.log10(abs(self.damping))))-1
+        self.stiffness_exponant=int(np.floor(np.log10(abs(self.stiffness))))-1
         self.compute_state_matrix()
 
         # Control and Observer data
@@ -52,6 +54,8 @@ class CompliantController(BaseController):
         self.observerForce = np.zeros((self.E.shape[1], 1))
         self.observerOutput = np.zeros((self.C.shape[0], 1))
         self.measurePrev = np.zeros((self.C.shape[0], 1))
+        self.measure_filter = np.zeros((self.C.shape[0], 1))
+        self.force_filter = np.zeros((self.E.shape[1], 1))
 
         # additional constant
         self.use_observer = use_observer
@@ -68,10 +72,12 @@ class CompliantController(BaseController):
             cmd = self.currentMotorPos.reshape(-1, 1)
             self.observerOutput = self.C @ self.observerState
             measureNoised = self.measurePrev + np.random.normal(0, self.guiNode.noise.value, self.markersPos.shape)
-            self.observerState = self.A @ self.observerState + self.B @ cmd + self.E @ self.observerForce + self.L_state @ (measureNoised - self.observerOutput)
-            self.observerForce = self.observerForce + self.L_force @ (measureNoised - self.observerOutput)
+            self.measure_filter = self.filter(measureNoised, self.measure_filter, cutoffFreq=1.)
+            self.observerState = self.A @ self.observerState + self.B @ cmd + self.E @ self.observerForce + self.L_state @ (self.measure_filter - self.observerOutput)
+            self.observerForce = self.observerForce + self.L_force @ (self.measure_filter - self.observerOutput)
             self.measurePrev = self.markersPos.copy()
             state4Control = self.observerState.copy()
+            self.force_filter = self.filter(self.observerForce, self.force_filter, cutoffFreq=10.)
 
             print(f"force: {self.current_force}, observer: {self.observerForce}")
 
@@ -88,7 +94,7 @@ class CompliantController(BaseController):
                 state4Control = self.R.T @ fullState
             desiredMotorPos = ( self.G @ self.reference_pos[[1]] - self.K @ state4Control).flatten()
             self.motor.position.value = desiredMotorPos[0]*1e2
-            self.reference_pos = self.A_ref @ self.reference_pos + self.B_ref @ self.desired_pos + self.E_ref @ self.observerForce
+            self.reference_pos = self.A_ref @ self.reference_pos + self.B_ref @ self.desired_pos + self.E_ref @ self.force_filter
         else:
             desiredMotorPos = self.currentMotorPos.copy()
             if self.guiNode.active.value:
@@ -105,6 +111,15 @@ class CompliantController(BaseController):
         self.guiNode.obsForce.value = self.observerForce[0, 0]*1e-2
         self.guiNode.reference_pos.value = self.reference_pos[1, 0]
 
+        if self.guiNode.update.value:
+            self.mass = self.mass*(10**self.mass_exponant)
+            self.damping = self.damping*(10**self.damping_exponant)
+            self.stiffness = self.stiffness*(10**self.stiffness_exponant)
+            try:
+                self.compute_state_matrix()
+            except Exception as e:
+                print(f"Error computing state matrix: {e}")
+
 
     def setup_additional_gui(self, use_observer):
         # Specific gui setup
@@ -115,10 +130,19 @@ class CompliantController(BaseController):
         self.guiNode.addData(name="output", type="float", value=0.)
         self.guiNode.addData(name="obsForce", type="float", value=0.)
         self.guiNode.addData(name="controlMode", type="bool", value=ControlMode["Open Loop"])
+        self.guiNode.addData(name="mass", type="float", value=self.mass/(10**self.mass_exponant))
+        self.guiNode.addData(name="damping", type="float", value=self.damping/(10**self.damping_exponant))
+        self.guiNode.addData(name="stiffness", type="float", value=self.stiffness/(10**self.stiffness_exponant))
+        self.guiNode.addData(name="update", type="int", value=0)
         MyGui.MyRobotWindow.addSettingInGroup("Reference (mm)", self.guiNode.desired_pos, -50, 50, "Control Law")
         if use_observer:
             MyGui.MyRobotWindow.addSettingInGroup("Observer Noise (mm)", self.guiNode.noise, 0, 3, "Control Law")
         MyGui.MyRobotWindow.addSettingInGroup("Control Mode", self.guiNode.controlMode, 0, 1, "Buttons")
+        MyGui.MyRobotWindow.addSettingInGroup(f"Mass (10^{self.mass_exponant})", self.guiNode.mass, 0, 100, "Reference System")
+        MyGui.MyRobotWindow.addSettingInGroup(f"Damping (10^{self.damping_exponant})", self.guiNode.damping, 0, 100, "Reference System")
+        MyGui.MyRobotWindow.addSettingInGroup(f"Stiffness (10^{self.stiffness_exponant})", self.guiNode.stiffness, 0, 100, "Reference System")
+        MyGui.MyRobotWindow.addSettingInGroup("Update", self.guiNode.update, 0, 1, "Reference System")
+
 
         # Plotting data
         MyGui.PlottingWindow.addData("Desired pos", self.guiNode.desired_pos)

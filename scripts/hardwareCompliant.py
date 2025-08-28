@@ -237,8 +237,6 @@ def processSlider(sharedMotorPos, sharedRefPos,
     root.mainloop()
 
 def processController(trackerPos, sharedMotorPos, sharedRefPos, sharedStart, sharedControlMode, sharedRecord, sharedSave, event):
-
-
     dt = 1/60
     m = np.array([[1.]])
     d = np.array([[10.]])

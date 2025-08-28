@@ -50,6 +50,16 @@ def arg_parse():
                         help="Motor cutoff frequency",
                         default='30.', dest="motorCutoffFreq")
 
+    parser.add_argument('--mass', type=str,
+                        help="Mass of the reference system (in kg).",
+                        default='0.05', dest="mass")
+    parser.add_argument('--damping', type=str,
+                        help="Damping coefficient of the reference system (in Ns/m).",
+                        default='1.75', dest="damping")
+    parser.add_argument('--stiffness', type=str,
+                        help="Stiffness coefficient of the reference system (in N/m).",
+                        default='15.', dest="stiffness")
+
     parser.add_argument('-ctr', "--controller", type=str,
                         help="Select the controller that will be used.",
                         default="openloop", dest="controller")
@@ -217,6 +227,7 @@ def createScene(rootnode):
         rootnode.addObject(CompliantController(
             leg, motor, markers, load,
             motorInit, motorMin, motorMax, float(args.motorCutoffFreq),
+            float(args.mass), float(args.damping), float(args.stiffness),
             int(args.order), int(args.useObserver)))
 
 
