@@ -7,44 +7,18 @@ import matplotlib.pyplot as plt
 # Note: This is where you implement the identification of the reduced linear model.
 ####################################################################################
 def identify_model(states, inputs, outputs, forces, reduced_positions, r):
-    """
-    Identify the discrete-time state-space model from reduced data.
-
-    Parameters:
-    - states: np.ndarray, shape (nx, L), reduced full states over time
-    - inputs: np.ndarray, shape (nu, L), inputs over time
-    - outputs: np.ndarray, shape (ny, L), outputs over time
-    - forces: np.ndarray, shape (nf, L), forces over time
-    - reduced_positions: np.ndarray, shape (nr, L), reduced positions over time
-    - r: int, reduction order (number of modes kept)
-
-    Returns:
-    - A: State matrix
-    - B: Input matrix
-    - E: Force matrix
-    - C: Output matrix
-    """
-
-    # === Step 1: Split current and next states ===
     x_next = states[:, 1:]
     x_curr = states[:, :-1]
     u_curr = inputs[:, :-1]
     f_curr = forces[:, :-1]
 
-    # === Step 2: Compute state and input matrices using least-squares ===
-    # Stack state and input to form [x; u]
-    # TODO: Complete this part
     state_input_force = np.vstack((x_curr, u_curr, f_curr))  # Shape: (nx + nu + nf, L - 1)
     ABE = x_next @ np.linalg.pinv(state_input_force)  # Shape: (nx, nx + nu + nf)
 
-    # Extract A and B from AB
     A = ABE[:, :states.shape[0]]  # State matrix A
     B = ABE[:, states.shape[0]:states.shape[0] + inputs.shape[0]]  # Input matrix B
     E = ABE[:, states.shape[0] + inputs.shape[0]:]  # Force matrix E
 
-    # === Step 3: Compute output matrix C ===
-    # C = [0  Cp] where Cp maps reduced positions to outputs
-    # TODO: Complete this part
     Cp = outputs @ np.linalg.pinv(reduced_positions)  # Shape: (ny, np)
     C = np.hstack((np.zeros_like(Cp), Cp))  # Shape: (ny, nx)
 

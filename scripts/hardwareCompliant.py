@@ -237,9 +237,13 @@ def processSlider(sharedMotorPos, sharedRefPos,
     root.mainloop()
 
 def processController(trackerPos, sharedMotorPos, sharedRefPos, sharedStart, sharedControlMode, sharedRecord, sharedSave, event):
+
+    t0 = time.time()
+
+
     dt = 1/60
-    m = np.array([[1.]])
-    d = np.array([[10.]])
+    m = np.array([[1.2]])
+    d = np.array([[4.2]])
     s = np.array([[15.]])
     alpha = np.linalg.inv(m + dt * d + dt**2 * s)
     A_ref = np.block([[alpha @ m, -dt * alpha @ s], [dt * alpha @ m, np.eye(1) - (dt**2) * alpha * s]])
@@ -258,7 +262,7 @@ def processController(trackerPos, sharedMotorPos, sharedRefPos, sharedStart, sha
     counterRecord = 0
     maxRecord = 400
     start = False
-    cutoffFreqMeasure = 40.  # Hz
+    cutoffFreqMeasure = 300.  # Hz
     cutoffFreqMotor = float(args.motorCutoffFreq)  # Hz
     samplingFreq = 60.  # Hz
 
@@ -290,11 +294,11 @@ def processController(trackerPos, sharedMotorPos, sharedRefPos, sharedStart, sha
     G = dataCl["feedForwardGain"]
 
     dataObs = np.load(observerPath)
-    L = dataObs["observerGain"]
-    L_state = L[:A.shape[0]]
-    L_force = L[A.shape[0]:]
+    L_state = dataObs["stateGain"]
+    L_force = dataObs["forceGain"]
     observerState = np.zeros((A.shape[0], 1))
     observerForce = np.zeros((E.shape[1], 1))
+    force_filter = np.zeros((E.shape[1], 1))
 
     # Initialize variables
     initialMarkersPos = np.zeros((3*nbMarkers, ))
@@ -319,6 +323,10 @@ def processController(trackerPos, sharedMotorPos, sharedRefPos, sharedStart, sha
     print(f"Motors initialized to {motors.angles}")
 
     while True:
+        # t1 = time.time()
+        # print(f"fps: {1/(t1 - t0)}")
+        # t0 = t1
+
         event.wait()
         event.clear()
 
@@ -332,6 +340,7 @@ def processController(trackerPos, sharedMotorPos, sharedRefPos, sharedStart, sha
         new_order = [i_sorted_y[0], i_sorted_y[1]]
         pos_sorted = pos[new_order]
         measure = pos_sorted.flatten()
+        # print(f"Measurements: {measure}")
 
         # Filter the measurements
         measureFiltered = filterFirstOder(measure, measureFiltered,
@@ -346,6 +355,7 @@ def processController(trackerPos, sharedMotorPos, sharedRefPos, sharedStart, sha
             if np.linalg.norm(markersPos - markersPosPrev) > 70:
                 print("Filtering markers ...")
                 markersPos = markersPosPrev.copy()
+            # print(f"markersPos: {markersPos.flatten()}")
 
 
             output = (markersPos.reshape(-1,1))[[x for i in range(nbMarkers) for x in [3*i+1, 3*i+2]]]
@@ -356,6 +366,8 @@ def processController(trackerPos, sharedMotorPos, sharedRefPos, sharedStart, sha
             observerOutput = C @ observerState
             observerState = A @ observerState + B @ cmd + E @ observerForce + L_state @ (outputPrev - observerOutput)
             observerForce = observerForce + L_force @ (output - observerOutput)
+            force_filter = filterFirstOder(observerForce, force_filter, cutoffFreq=1000.)
+            # print(f"Observer Force: {observerForce}, force_filter: {force_filter}")
 
             desired_pos = np.array([sharedRefPos[:]]).reshape(-1, 1)
 
@@ -366,6 +378,7 @@ def processController(trackerPos, sharedMotorPos, sharedRefPos, sharedStart, sha
                 command = G @ reference_pos[[1]] - K @ observerState
                 command = command.flatten()
                 reference_pos = A_ref @ reference_pos + B_ref @ desired_pos + E_ref @ observerForce
+                # print(f"Reference Position: {reference_pos}")
                 # print(f"Command: {command}")
 
 

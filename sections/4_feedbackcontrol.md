@@ -1,4 +1,4 @@
-::::: collapse State Feedback Control
+::::::: collapse State Feedback Control
 
 ## State Feedback Control
 
@@ -41,17 +41,25 @@ To ensure perfect tracking (i.e., $y_c=r$), we choose the feedforward matrix $G$
 
 $$G = (C_{ctr} (I-A+BK)^{-1}B)^{-1}$$
 
-:::: exercise
+:::::: exercise
 
 **Exercise 4:**
 Check the following file to do the tasks listed below.:
 #open-button("assets/labs/EmioLabs_Compliant/scripts/controller.py")
 
 Given the linear model that you generated on the previous step, you will:
-1. Use one of the methods given earlier to compute the state feedback matrix $K$.
-2. Compute the feedforward matrix $G$
-#runsofa-button("assets/labs/EmioLabs_Compliant/scripts/controller.py" "--order" "order")
-3. Test on Sofa to see how you can control the robot using this control law.
-#runsofa-button("assets/labs/EmioLabs_Compliant/lab_compliant.py" "--controller" "closedloop" "--motorCutoffFreq" "cutoffFreq" "--motorInit" "motorInit" "--motorMin" "motorMin" "--motorMax" "motorMax" "--order" "order" "--useObserver" "0")
+1. Select the observer type:
+::::: group-grid {style="grid-template-rows:repeat(2, 0fr);"}
+**Controller type**
+:::: select controller_type
+::: option state_feedback
+::: option state_feedback_integral
 ::::
 :::::
+2. Use one of the methods given earlier to compute the state feedback matrix $K$.
+3. Compute the feedforward matrix $G$
+#runsofa-button("assets/labs/EmioLabs_Compliant/scripts/controller.py" "--order" "order" "--controller_type" "controller_type")
+4. Test on Sofa to see how you can control the robot using this control law.
+#runsofa-button("assets/labs/EmioLabs_Compliant/lab_compliant.py" "--controller" "closedloop" "--motorCutoffFreq" "cutoffFreq" "--motorInit" "motorInit" "--motorMin" "motorMin" "--motorMax" "motorMax" "--order" "order" "--useObserver" "0")
+::::::
+:::::::

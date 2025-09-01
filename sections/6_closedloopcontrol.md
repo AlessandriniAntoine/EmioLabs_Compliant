@@ -1,41 +1,84 @@
-::::: collapse Closed Loop Control
+::::::: collapse {open} Closed Loop Control
 
 ## Closed Loop Control
 
-**Closed Loop Control.** In simulation, we have access to the full (reduced) state of the system. However, to better reflect realistic conditions, we simulate the control using an observer rather than the true state.
+**Closed Loop Control.**
 
-The control law becomes:
+:::::: highlight
+1. Generate Open Loop data
+::::: group-grid {style="grid-template-rows:repeat(5, 0fr);"}
+**Motor**
+Init, Min, Max (rad)
 
-$$u = Gr - K\hat{x}$$
+#input("motorInit")
 
-where $\hat{x}$ is the estimated state from the observer, and $r$ is the reference for the controlled output.
+#input("motorMin")
 
-The overall structure of the closed-loop control system is shown below:
-|  ![](assets/data/images/labCompliant-feedback-observer-structure.png)   |
-|:------------------------------------------------:|
-| **State feedback with observer structure** |
+#input("motorMax")
 
-The simulation loop proceeds as follows:
+* * *
+**Cutoff frequency (Hz)**
 
-- Initialize the estimated state $\hat{x}$.
-- At each time step:
-  1. Measure the output y and estimate output $\hat{y} = C\hat{x}$.
-  2. Compute the control input $u = Gr - K\hat{x}$.
-  3. Update the observer using $\hat{x}^+ = A\hat{x} + Bu + L(y−\hat{y})$.
+#input("cutoffFreq")
 
-
-This setup will first be implemented in SOFA, which provides the system dynamics and sensor measurements. It enables evaluation of the full closed-loop system without requiring physical hardware, while still respecting realistic sensing and estimation constraints.
-
-#runsofa-button("assets/labs/EmioLabs_Compliant/lab_compliant.py" "--controller" "closedloop" "--motorCutoffFreq" "cutoffFreq" "--motorInit" "motorInit" "--motorMin" "motorMin" "--motorMax" "motorMax" "--order" "order" "--useObserver" "1")
-
-In a second step, the same control law can be deployed on the real robot. The observer will estimate the state based on measured outputs (e.g., marker positions), and the computed control input $u$ will be applied to the motor.
-
-```bash
-$ python scripts/hardware.py --motorCutoffFreq cutoffFreq --motorInit motorInit --motorMin motorMin --motorMax motorMax --order order
-```
-
-::: highlight
-#icon("warning") Insight:
-This architecture enables real-time control using only partial measurements, and bridges the gap between model-based design and physical implementation. The exact same controller and observer gains designed in simulation can be reused on the real system, as long as the model accurately captures the dynamics.
-:::
 :::::
+#runsofa-button("assets/labs/EmioLabs_Compliant/lab_compliant.py" "--controller" "openloop" "--motorCutoffFreq" "cutoffFreq" "--motorInit" "motorInit" "--motorMin" "motorMin" "--motorMax" "motorMax")
+::::::
+
+:::::: highlight
+2. Compute the reduction error for different orders.
+#runsofa-button("assets/labs/EmioLabs_Compliant/scripts/reduction.py" "--mode" "0")
+
+3. Select the order of the reduction $r$.
+::::: select order
+::: option 1
+::: option 2
+::: option 3
+::: option 4
+::: option 5
+::: option 6
+::: option 7
+::: option 8
+::: option 9
+::: option 10
+:::::
+#runsofa-button("assets/labs/EmioLabs_Compliant/scripts/reduction.py" "--mode" "1" "--order" "order")
+::::::
+
+:::::: highlight
+4. Identify the model
+#runsofa-button("assets/labs/EmioLabs_Compliant/scripts/identification.py" "--order" "order")
+::::::
+
+:::::: highlight
+5. Select the controller type:
+::::: group-grid {style="grid-template-rows:repeat(2, 0fr);"}
+**Controller type**
+:::: select controller_type
+::: option state_feedback
+::: option state_feedback_integral
+::::
+:::::
+#runsofa-button("assets/labs/EmioLabs_Compliant/scripts/controller.py" "--order" "order" "--controller_type" "controller_type")
+::::::
+
+:::::: highlight
+6. Select the observer type:
+::::: group-grid {style="grid-template-rows:repeat(2, 0fr);"}
+**Observer type**
+:::: select observer_type
+::: option default
+::: option perturbation
+::: option force
+::: option perturbation_force
+::::
+:::::
+#runsofa-button("assets/labs/EmioLabs_Compliant/scripts/observer.py" "--order" "order" "--observer_type" "observer_type")
+::::::
+
+:::::: highlight
+7. Try on Sofa
+#runsofa-button("assets/labs/EmioLabs_Compliant/lab_compliant.py" "--controller" "closedloop" "--motorCutoffFreq" "cutoffFreq" "--motorInit" "motorInit" "--motorMin" "motorMin" "--motorMax" "motorMax" "--order" "order" "--controller_type" "controller_type" "--observer_type" "observer_type")
+::::::
+
+:::::::

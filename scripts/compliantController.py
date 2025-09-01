@@ -40,9 +40,9 @@ class CompliantController(BaseController):
         self.K, self.G = control["feedbackGain"], control["feedForwardGain"]
         if use_observer:
             observer = np.load(os.path.join(data_path, f"observer_order{order}.npz"))
-            self.L = observer["observerGain"]
-            self.L_state = self.L[:self.A.shape[0]]
-            self.L_force = self.L[self.A.shape[0]:]
+            self.L_state = observer["stateGain"]
+            self.L_perturbation = observer["perturbationGain"]
+            self.L_force = observer["forceGain"]
         else:
             reduction = np.load(os.path.join(data_path, f"reduction_order{order}.npz"))
             self.R = reduction["reductionMatrix"]
@@ -51,11 +51,13 @@ class CompliantController(BaseController):
         self.desired_pos = np.zeros((self.B.shape[1], 1))
         self.reference_pos = np.zeros((2*self.B.shape[1], 1))
         self.observerState = np.zeros((self.A.shape[0], 1))
+        self.observerPerturbation = np.zeros((self.B.shape[1], 1))
         self.observerForce = np.zeros((self.E.shape[1], 1))
         self.observerOutput = np.zeros((self.C.shape[0], 1))
         self.measurePrev = np.zeros((self.C.shape[0], 1))
         self.measure_filter = np.zeros((self.C.shape[0], 1))
         self.force_filter = np.zeros((self.E.shape[1], 1))
+        self.perturbation_filter = np.zeros((self.B.shape[1], 1))
 
         # additional constant
         self.use_observer = use_observer
@@ -71,15 +73,23 @@ class CompliantController(BaseController):
         if self.use_observer:
             cmd = self.currentMotorPos.reshape(-1, 1)
             self.observerOutput = self.C @ self.observerState
-            measureNoised = self.measurePrev + np.random.normal(0, self.guiNode.noise.value, self.markersPos.shape)
+            measureNoised = self.measurePrev + self.guiNode.noise.value*(2*np.random.rand(self.measurePrev.shape[0], 1)-1)
+            # print(f"Measurements: {self.measurePrev.flatten()}")
+            # print(f"M with noise: {measureNoised.flatten()}")
             self.measure_filter = self.filter(measureNoised, self.measure_filter, cutoffFreq=1.)
+
             self.observerState = self.A @ self.observerState + self.B @ cmd + self.E @ self.observerForce + self.L_state @ (self.measure_filter - self.observerOutput)
+            self.observerPerturbation = self.observerPerturbation + self.L_perturbation @ (self.measure_filter - self.observerOutput)
             self.observerForce = self.observerForce + self.L_force @ (self.measure_filter - self.observerOutput)
+
             self.measurePrev = self.markersPos.copy()
             state4Control = self.observerState.copy()
-            self.force_filter = self.filter(self.observerForce, self.force_filter, cutoffFreq=10.)
 
-            print(f"force: {self.current_force}, observer: {self.observerForce}")
+            self.perturbation_filter = self.filter(self.observerPerturbation, self.perturbation_filter, cutoffFreq=100.)
+            self.force_filter = self.filter(self.observerForce, self.force_filter, cutoffFreq=100.)
+
+            print(f"force: {self.current_force}, observer: {self.force_filter}")
+            # print(f"perturbation: {self.perturbation_filter}")
 
 
         if self.guiNode.active.value:
@@ -112,13 +122,14 @@ class CompliantController(BaseController):
         self.guiNode.reference_pos.value = self.reference_pos[1, 0]
 
         if self.guiNode.update.value:
-            self.mass = self.mass*(10**self.mass_exponant)
-            self.damping = self.damping*(10**self.damping_exponant)
-            self.stiffness = self.stiffness*(10**self.stiffness_exponant)
+            self.mass = self.guiNode.mass.value*(10**self.mass_exponant)
+            self.damping = self.guiNode.damping.value*(10**self.damping_exponant)
+            self.stiffness = self.guiNode.stiffness.value*(10**self.stiffness_exponant)
             try:
                 self.compute_state_matrix()
             except Exception as e:
                 print(f"Error computing state matrix: {e}")
+            self.guiNode.update.value = False
 
 
     def setup_additional_gui(self, use_observer):
@@ -136,7 +147,7 @@ class CompliantController(BaseController):
         self.guiNode.addData(name="update", type="int", value=0)
         MyGui.MyRobotWindow.addSettingInGroup("Reference (mm)", self.guiNode.desired_pos, -50, 50, "Control Law")
         if use_observer:
-            MyGui.MyRobotWindow.addSettingInGroup("Observer Noise (mm)", self.guiNode.noise, 0, 3, "Control Law")
+            MyGui.MyRobotWindow.addSettingInGroup("Observer Noise (mm)", self.guiNode.noise, 0, 10, "Control Law")
         MyGui.MyRobotWindow.addSettingInGroup("Control Mode", self.guiNode.controlMode, 0, 1, "Buttons")
         MyGui.MyRobotWindow.addSettingInGroup(f"Mass (10^{self.mass_exponant})", self.guiNode.mass, 0, 100, "Reference System")
         MyGui.MyRobotWindow.addSettingInGroup(f"Damping (10^{self.damping_exponant})", self.guiNode.damping, 0, 100, "Reference System")

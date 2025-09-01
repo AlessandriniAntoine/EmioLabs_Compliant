@@ -66,9 +66,12 @@ def arg_parse():
     parser.add_argument('--order', type=str,
                         help="Specify the order of the reduction",
                         default='7', dest="order")
-    parser.add_argument('--useObserver', type=str,
-                        help="Specify the order of the reduction",
-                        default='1', dest="useObserver")
+    parser.add_argument('--observer_type', type=str,
+                        help="Specify the type of observer to be used.",
+                        default='1', dest="observer_type")
+    parser.add_argument('--controller_type', type=str,
+                        help="Specify the type of controller to be used.",
+                        default='1', dest="controller_type")
 
     parser.add_argument('--no-connection', dest="connection", action='store_false',
                         help="use when you want to run the simulation without the robot")
@@ -221,7 +224,7 @@ def createScene(rootnode):
         rootnode.addObject(ClosedLoopController(
             leg, motor, markers, load,
             motorInit, motorMin, motorMax, float(args.motorCutoffFreq),
-            int(args.order), int(args.useObserver)))
+            int(args.order), args.controller_type, args.observer_type))
     elif args.controller == "compliant":
         from scripts.compliantController import CompliantController
         rootnode.addObject(CompliantController(

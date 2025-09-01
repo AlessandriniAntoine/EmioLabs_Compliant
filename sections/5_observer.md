@@ -1,4 +1,4 @@
-::::: collapse Observer Design
+::::::: collapse Observer Design
 
 ## Observer Design
 
@@ -33,15 +33,26 @@ $$(A, B, K) \rightarrow (A^\top, C^\top, L^\top)$$.
 So you can compute $L$ using the same methods and tools as for $K$, by transposing the appropriate matrices.
 :::
 
-:::: exercise
+:::::: exercise
 
 **Exercise 5:**
 
 Check the following file to do the tasks listed below.:
 #open-button("assets/labs/EmioLabs_Compliant/scripts/observer.py")
 
-1. Implement one the method to compute the observer gain $L$
-#runsofa-button("assets/labs/EmioLabs_Compliant/scripts/observer.py" "--order" "order")
-2. Test the observer on Sofa to see how it can estimate the state of the system.
+1. Select the observer type:
+::::: group-grid {style="grid-template-rows:repeat(2, 0fr);"}
+**Observer type**
+:::: select observer_type
+::: option default
+::: option perturbation
+::: option force
+::: option perturbation_force
 ::::
 :::::
+
+2. Implement one the method to compute the observer gain $L$
+#runsofa-button("assets/labs/EmioLabs_Compliant/scripts/observer.py" "--order" "order" "--observer_type" "observer_type")
+
+::::::
+:::::::

@@ -23,10 +23,11 @@ the <span style="color:grey">*grey mass*</span>, and two <span style="color:gree
 ![](assets/data/images/labCompliant-setup-emio.png){width=75% .center}
 :::
 
-#include(assets/labs/EmioLabs_Compliant/sections/1_openloopcontrol.md)
+#include(assets/labs/EmioLabs_Compliant/sections/6_closedloopcontrol.md)
+
+<!--#include(assets/labs/EmioLabs_Compliant/sections/1_openloopcontrol.md)
 #include(assets/labs/EmioLabs_Compliant/sections/2_modelorderreduction.md)
 #include(assets/labs/EmioLabs_Compliant/sections/3_linearidentification.md)
 #include(assets/labs/EmioLabs_Compliant/sections/4_feedbackcontrol.md)
-#include(assets/labs/EmioLabs_Compliant/sections/5_observer.md)
-#include(assets/labs/EmioLabs_Compliant/sections/6_closedloopcontrol.md)
-#include(assets/labs/EmioLabs_Compliant/sections/7_compliantcontrol.md)
+#include(assets/labs/EmioLabs_Compliant/sections/5_observer.md)-->
+<!--#include(assets/labs/EmioLabs_Compliant/sections/7_compliantcontrol.md)-->

@@ -143,9 +143,7 @@ class BaseController(Sofa.Core.Controller):
         command = self.currentMotorPos + motorDisplacement
         command = np.clip(command, self.motorMin, self.motorMax)
         self.motor.JointActuator.value.value = command[0] + self.motorInit
-
         self.force.forces = [[ 0, 0, self.guiNode.force.value*1e2, 0, 0, 0, 0]]
-        # self.guiNode.force.value = 0
 
     def execute_control_at_camera_frame(self):
        raise NotImplementedError("execute_control_at_camera_frame method must be implemented in the derived class.")
