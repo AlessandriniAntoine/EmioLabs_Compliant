@@ -238,13 +238,10 @@ def processSlider(sharedMotorPos, sharedRefPos,
 
 def processController(trackerPos, sharedMotorPos, sharedRefPos, sharedStart, sharedControlMode, sharedRecord, sharedSave, event):
 
-    t0 = time.time()
-
-
     dt = 1/60
-    m = np.array([[1.2]])
-    d = np.array([[4.2]])
-    s = np.array([[15.]])
+    m = np.array([[0.5]])
+    d = np.array([[20]])
+    s = np.array([[10]])
     alpha = np.linalg.inv(m + dt * d + dt**2 * s)
     A_ref = np.block([[alpha @ m, -dt * alpha @ s], [dt * alpha @ m, np.eye(1) - (dt**2) * alpha * s]])
     E_ref = np.block([[dt * alpha], [(dt**2) * alpha]])
@@ -262,7 +259,7 @@ def processController(trackerPos, sharedMotorPos, sharedRefPos, sharedStart, sha
     counterRecord = 0
     maxRecord = 400
     start = False
-    cutoffFreqMeasure = 300.  # Hz
+    cutoffFreqMeasure = 5.  # Hz
     cutoffFreqMotor = float(args.motorCutoffFreq)  # Hz
     samplingFreq = 60.  # Hz
 
@@ -290,8 +287,10 @@ def processController(trackerPos, sharedMotorPos, sharedRefPos, sharedStart, sha
     C = dataModel["outputMatrix"]
 
     dataCl = np.load(controlPath)
-    K = dataCl["feedbackGain"]
-    G = dataCl["feedForwardGain"]
+    K_state = dataCl["statefeedbackGain"]
+    K_int = dataCl["integralfeedbackGain"]
+    integral = np.zeros((K_int.shape[1], 1))
+    # G = dataCl["feedForwardGain"]
 
     dataObs = np.load(observerPath)
     L_state = dataObs["stateGain"]
@@ -366,8 +365,8 @@ def processController(trackerPos, sharedMotorPos, sharedRefPos, sharedStart, sha
             observerOutput = C @ observerState
             observerState = A @ observerState + B @ cmd + E @ observerForce + L_state @ (outputPrev - observerOutput)
             observerForce = observerForce + L_force @ (output - observerOutput)
-            force_filter = filterFirstOder(observerForce, force_filter, cutoffFreq=1000.)
-            # print(f"Observer Force: {observerForce}, force_filter: {force_filter}")
+            force_filter = filterFirstOder(observerForce, force_filter, cutoffFreq=1.)
+            print(f"force: {force_filter[0,0]/9.81} (g)")
 
             desired_pos = np.array([sharedRefPos[:]]).reshape(-1, 1)
 
@@ -375,13 +374,12 @@ def processController(trackerPos, sharedMotorPos, sharedRefPos, sharedStart, sha
                 with sharedMotorPos.get_lock():
                     command = np.array(sharedMotorPos[:])
             else:
-                command = G @ reference_pos[[1]] - K @ observerState
+                command = - K_state @ observerState - K_int @ integral
                 command = command.flatten()
                 reference_pos = A_ref @ reference_pos + B_ref @ desired_pos + E_ref @ observerForce
-                # print(f"Reference Position: {reference_pos}")
+                integral += (reference_pos[[1]] - output[[1]])
+                print(f"Reference Position: {reference_pos[1, 0]} (mm)")
                 # print(f"Command: {command}")
-
-
 
             # apply the motor position
             motorPos = filterFirstOder(command, motorPos, cutoffFreq=cutoffFreqMotor, samplingFreq=samplingFreq)

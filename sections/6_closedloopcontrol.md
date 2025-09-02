@@ -81,4 +81,19 @@ Init, Min, Max (rad)
 #runsofa-button("assets/labs/EmioLabs_Compliant/lab_compliant.py" "--controller" "closedloop" "--motorCutoffFreq" "cutoffFreq" "--motorInit" "motorInit" "--motorMin" "motorMin" "--motorMax" "motorMax" "--order" "order" "--controller_type" "controller_type" "--observer_type" "observer_type")
 ::::::
 
+:::::: highlight
+8. Try on compliant control
+::::: group-grid {style="grid-template-rows:repeat(2, 0fr);"}
+**Mass**
+#input("mass")
+
+**Damping**
+#input("damping")
+
+**Stiffness**
+#input("stiffness")
+:::::
+#runsofa-button("assets/labs/EmioLabs_Compliant/lab_compliant.py" "--controller" "compliant" "--motorCutoffFreq" "cutoffFreq" "--motorInit" "motorInit" "--motorMin" "motorMin" "--motorMax" "motorMax" "--order" "order" "--controller_type" "controller_type" "--observer_type" "observer_type" "--mass" "mass" "--damping" "damping" "--stiffness" "stiffness")
+::::::
+
 :::::::

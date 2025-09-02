@@ -32,7 +32,7 @@ class BaseController(Sofa.Core.Controller):
         self.root.VisualStyle.displayFlags.value = "showVisualModels showForceFields"
         self.force = self.load.addObject('ConstantForceField', name="User", indices=[0], showArrowSize=0.03)
         self.force.forces.value = [7 * [0.]]
-        self.maxforce = 40
+        self.max_mass = 500
 
         # GUI setup
         self.guiNode = self.root.addChild("guiNode")
@@ -50,7 +50,7 @@ class BaseController(Sofa.Core.Controller):
         self.guiNode.addData(name="saving", type="bool", value=False)
         self.guiNode.addData(name="active", type="bool", value=False)
 
-        MyGui.MyRobotWindow.addSettingInGroup("Horizontal", self.guiNode.force, -self.maxforce, self.maxforce, "User Actions")
+        MyGui.MyRobotWindow.addSettingInGroup("Equivalent mass (g)", self.guiNode.force, -self.max_mass, self.max_mass, "User Actions")
         MyGui.MyRobotWindow.addSettingInGroup("Active", self.guiNode.active, 0, 1, "Buttons")
         MyGui.MyRobotWindow.addSettingInGroup("Record", self.guiNode.record, 0, 1, "Buttons")
         MyGui.MyRobotWindow.addSettingInGroup("Saving", self.guiNode.saving, 0, 1, "Buttons")
@@ -143,7 +143,7 @@ class BaseController(Sofa.Core.Controller):
         command = self.currentMotorPos + motorDisplacement
         command = np.clip(command, self.motorMin, self.motorMax)
         self.motor.JointActuator.value.value = command[0] + self.motorInit
-        self.force.forces = [[ 0, 0, self.guiNode.force.value*1e2, 0, 0, 0, 0]]
+        self.force.forces = [[ 0, 0, self.guiNode.force.value*abs(self.root.gravity.value[1])*1e-3, 0, 0, 0, 0]]
 
     def execute_control_at_camera_frame(self):
        raise NotImplementedError("execute_control_at_camera_frame method must be implemented in the derived class.")

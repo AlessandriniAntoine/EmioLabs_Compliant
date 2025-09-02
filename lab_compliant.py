@@ -230,8 +230,8 @@ def createScene(rootnode):
         rootnode.addObject(CompliantController(
             leg, motor, markers, load,
             motorInit, motorMin, motorMax, float(args.motorCutoffFreq),
-            float(args.mass), float(args.damping), float(args.stiffness),
-            int(args.order), int(args.useObserver)))
+            int(args.order), args.controller_type, args.observer_type,
+            float(args.mass), float(args.damping), float(args.stiffness)))
 
 
     ##############################################################################

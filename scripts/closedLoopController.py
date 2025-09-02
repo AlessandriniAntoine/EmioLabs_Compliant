@@ -55,7 +55,7 @@ class ClosedLoopController(BaseController):
             self.filterPerturbation = np.zeros((self.B.shape[1], 1))
 
         # additional states for closed-loop control
-        self.reference = np.zeros((self.B.shape[1], 1))
+        self.reference_pos = np.zeros((self.B.shape[1], 1))
         self.observerState = np.zeros((self.A.shape[0], 1))
         self.observerOutput = np.zeros((self.C.shape[0], 1))
         self.measurePrev = np.zeros((self.C.shape[0], 1))
@@ -94,11 +94,11 @@ class ClosedLoopController(BaseController):
     def compute_command(self):
         if self.controller_type == "state_feedback_integral":
             desiredMotorPos = (-self.K_state @ self.observerState - self.K_int @ self.integral).flatten()
-            self.integral += self.reference - self.filterMeasure[[1]]
+            self.integral += self.reference_pos - self.filterMeasure[[1]]
         elif self.controller_type == "state_feedback" and "perturbation" in self.observer_type:
-            desiredMotorPos = ( self.G @ self.reference - self.K_state @ self.observerState - self.filterPerturbation).flatten()
+            desiredMotorPos = ( self.G @ self.reference_pos - self.K_state @ self.observerState - self.filterPerturbation).flatten()
         else:
-            desiredMotorPos = ( self.G @ self.reference - self.K_state @ self.observerState).flatten()
+            desiredMotorPos = ( self.G @ self.reference_pos - self.K_state @ self.observerState).flatten()
         return desiredMotorPos[0]
 
 
@@ -110,9 +110,9 @@ class ClosedLoopController(BaseController):
 
 
         if self.guiNode.active.value:
-            self.reference = np.array([[self.guiNode.reference.value]])
+            self.reference_pos = np.array([[self.guiNode.reference_pos.value]])
             markersPos = self.markers.position.value.flatten()
-            self.refMo.position.value = np.array([[self.initRefMo[0], markersPos[1], self.initRefMo[2] + self.reference[0, 0]]])
+            self.refMo.position.value = np.array([[self.initRefMo[0], markersPos[1], self.initRefMo[2] + self.reference_pos[0, 0]]])
 
         # control
         if self.guiNode.controlMode.value == ControlMode["State Feedback"]:
@@ -132,39 +132,37 @@ class ClosedLoopController(BaseController):
         super().execute_control_at_simu_frame()
         self.guiNode.output.value = self.markersPos[1, 0]
         if "force" in self.observer_type:
-            self.guiNode.observerForce.value = self.observerForce[0, 0] / 9.81
-            self.guiNode.trueForce.value = self.guiNode.force.value * 100 / 9.81
+            self.guiNode.observerForce.value = self.filterForce[0, 0] / 9.81
 
 
     def setup_additional_gui(self):
         self.guiNode.addData(name="noise", type="float", value=0.)
-        self.guiNode.addData(name="reference", type="float", value=0.)
+        self.guiNode.addData(name="reference_pos", type="float", value=0.)
         self.guiNode.addData(name="output", type="float", value=0.)
         self.guiNode.addData(name="controlMode", type="bool", value=ControlMode["Open Loop"])
         self.guiNode.addData(name="cutoffMotorFreq", type="float", value=self.cutoffFreq)
-        self.guiNode.addData(name="cutoffMeasureFreq", type="float", value=60.)
+        self.guiNode.addData(name="cutoffMeasureFreq", type="float", value=600.)
 
 
-        MyGui.MyRobotWindow.addSettingInGroup("Reference (mm)", self.guiNode.reference, -50, 50, "Control Law")
+        MyGui.MyRobotWindow.addSettingInGroup("Reference (mm)", self.guiNode.reference_pos, -50, 50, "Control Law")
         MyGui.MyRobotWindow.addSettingInGroup("Observer Noise (mm)", self.guiNode.noise, 0, 3, "Control Law")
         MyGui.MyRobotWindow.addSettingInGroup("Control Mode", self.guiNode.controlMode, 0, 1, "Buttons")
         MyGui.MyRobotWindow.addSettingInGroup("Motor (Hz)", self.guiNode.cutoffMotorFreq, 0, 100, "Cutoff Frequency")
-        MyGui.MyRobotWindow.addSettingInGroup("Measurement (Hz)", self.guiNode.cutoffMeasureFreq, 0, 100, "Cutoff Frequency")
+        MyGui.MyRobotWindow.addSettingInGroup("Measurement (0.1Hz)", self.guiNode.cutoffMeasureFreq, 0, 1000, "Cutoff Frequency")
         if "perturbation" in self.observer_type:
             self.guiNode.addData(name="cutoffPerturbationFreq", type="float", value=60.)
             MyGui.MyRobotWindow.addSettingInGroup("Perturbation (0.01Hz)", self.guiNode.cutoffPerturbationFreq, 0, 100, "Cutoff Frequency")
 
         # Plotting data
-        MyGui.PlottingWindow.addData("Reference (mm)", self.guiNode.reference)
+        MyGui.PlottingWindow.addData("Reference (mm)", self.guiNode.reference_pos)
         MyGui.PlottingWindow.addData("Output (mm)", self.guiNode.output)
         MyGui.PlottingWindow.addData("Motor (rad)", self.motor.JointActuator.value)
 
         if "force" in self.observer_type:
-            self.guiNode.addData(name="trueForce", type="float", value=0.)
             self.guiNode.addData(name="observerForce", type="float", value=0.)
-            self.guiNode.addData(name="cutoffForceFreq", type="float", value=60.)
-            MyGui.MyRobotWindow.addSettingInGroup("Force (Hz)", self.guiNode.cutoffForceFreq, 0, 100, "Cutoff Frequency")
-            MyGui.PlottingWindow.addData("Force (g)", self.guiNode.trueForce)
+            self.guiNode.addData(name="cutoffForceFreq", type="float", value=600.)
+            MyGui.MyRobotWindow.addSettingInGroup("Force (0.1Hz)", self.guiNode.cutoffForceFreq, 0, 1000, "Cutoff Frequency")
+            MyGui.PlottingWindow.addData("Force (g)", self.guiNode.force)
             MyGui.PlottingWindow.addData("Force obs (g)", self.guiNode.observerForce)
 
 

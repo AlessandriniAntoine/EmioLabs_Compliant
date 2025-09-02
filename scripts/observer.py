@@ -42,7 +42,7 @@ def design_observer_force(A, E, C):
     if obsv_rank != Abar.shape[0]:
         raise ValueError(f"System is not observable: rank {obsv_rank}, expected {Abar.shape[0]}.")
 
-    Q = np.diag(A.shape[0] * [1e2] + [1e4])
+    Q = np.diag(A.shape[0] * [1e2] + [1e2])
     R = 1e1 * np.eye(Cbar.shape[0])
     Lt, _, _ =  ct.dlqr(Abar.T, Cbar.T, Q, R)
     L = Lt.T
