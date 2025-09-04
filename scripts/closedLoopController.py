@@ -1,4 +1,5 @@
 from .baseController import *
+from .utils import Observer, StateFeedback, StateFeedbackIntegral
 
 
 ControlMode = {"Open Loop": False, "State Feedback": True}
@@ -29,37 +30,26 @@ class ClosedLoopController(BaseController):
         self.controller_type = controller_type
         self.observer_type = observer_type
 
-        # Control and Observer data
-        model = np.load(os.path.join(data_path, f"model_order{order}.npz"))
-        self.A, self.B, self.C = model["stateMatrix"], model["inputMatrix"], model["outputMatrix"]
-        if "force" in observer_type:
-            self.E = model["forceMatrix"]
 
-        control = np.load(os.path.join(data_path, f"controller_order{order}.npz"))
-        self.K_state = control["statefeedbackGain"]
+        control_path = os.path.join(data_path, f"controller_order{order}.npz")
         if controller_type == "state_feedback":
-            self.G = control["feedforwardGain"]
+            self.controller = StateFeedback(control_path)
         elif controller_type == "state_feedback_integral":
-            self.K_int = control["integralfeedbackGain"]
-            self.integral = np.zeros((self.B.shape[1], 1))
+            self.controller = StateFeedbackIntegral(control_path)
 
-        observer = np.load(os.path.join(data_path, f"observer_order{order}.npz"))
-        self.L_state = observer["stateGain"]
+        observer_path = os.path.join(data_path, f"observer_order{order}_{observer_type}.npz")
+        self.observer = Observer(observer_path)
         if "force" in observer_type:
-            self.L_force = observer["forceGain"]
-            self.observerForce = np.zeros((self.E.shape[1], 1))
-            self.filterForce = np.zeros((self.E.shape[1], 1))
+            self.filterForce = np.zeros((self.observer.B.shape[1], 1))
         if "perturbation" in observer_type:
-            self.L_perturbation = observer["perturbationGain"]
-            self.observerPerturbation = np.zeros((self.B.shape[1], 1))
-            self.filterPerturbation = np.zeros((self.B.shape[1], 1))
+            self.filterPerturbation = np.zeros((self.observer.B.shape[1], 1))
+
+        self.nb_state = 2 * order
 
         # additional states for closed-loop control
-        self.reference_pos = np.zeros((self.B.shape[1], 1))
-        self.observerState = np.zeros((self.A.shape[0], 1))
-        self.observerOutput = np.zeros((self.C.shape[0], 1))
-        self.measurePrev = np.zeros((self.C.shape[0], 1))
-        self.filterMeasure = np.zeros((self.C.shape[0], 1))
+        self.reference_pos = np.zeros((self.observer.B.shape[1], 1))
+        self.measurePrev = np.zeros((self.observer.C.shape[0], 1))
+        self.filterMeasure = np.zeros((self.observer.C.shape[0], 1))
 
         # additional data storage
         self.observerStateList = []
@@ -68,37 +58,26 @@ class ClosedLoopController(BaseController):
 
 
     def update_observer(self, cmd):
-        self.observerOutput = self.C @ self.observerState
         measureNoised = self.measurePrev + np.random.normal(0, self.guiNode.noise.value, self.markersPos.shape)
         self.filterMeasure = self.filter(measureNoised, self.filterMeasure, cutoffFreq=self.guiNode.cutoffMeasureFreq.value)
+        self.observer.update(cmd, self.filterMeasure)
         if "force" == self.observer_type:
-            self.observerState = self.A @ self.observerState + self.B @ cmd + self.E @ self.observerForce + self.L_state @ (self.filterMeasure - self.observerOutput)
-            self.observerForce += self.L_force @ (self.filterMeasure - self.observerOutput)
-            self.filterForce = self.filter(self.observerForce, self.filterForce, cutoffFreq=self.guiNode.cutoffForceFreq.value)
+            self.filterForce = self.filter(self.observer.state[self.nb_state:], self.filterForce, cutoffFreq=self.guiNode.cutoffForceFreq.value)
         elif "perturbation" == self.observer_type:
-            self.observerState = self.A @ self.observerState + self.B @ cmd + self.L_state @ (self.filterMeasure - self.observerOutput)
-            self.observerPerturbation += self.L_perturbation @ (self.filterMeasure - self.observerOutput)
-            print(f"observerPerturbation: {self.observerPerturbation}")
-            self.filterPerturbation = self.filter(self.observerPerturbation, self.filterPerturbation, cutoffFreq=0.01*self.guiNode.cutoffPerturbationFreq.value)
-            print(f"filterPerturbation: {self.filterPerturbation}")
+            self.filterPerturbation = self.filter(self.observer.state[self.nb_state:], self.filterPerturbation, cutoffFreq=0.01*self.guiNode.cutoffPerturbationFreq.value)
         elif "perturbation_force" == self.observer_type:
-            self.observerState = self.A @ self.observerState + self.B @ cmd + self.E @ self.observerForce + self.L_state @ (self.filterMeasure - self.observerOutput)
-            self.observerPerturbation += self.L_perturbation @ (self.filterMeasure - self.observerOutput)
-            self.observerForce += self.L_force @ (self.filterMeasure - self.observerOutput)
-            self.filterPerturbation = self.filter(self.observerPerturbation, self.filterPerturbation, cutoffFreq=0.01*self.guiNode.cutoffPerturbationFreq.value)
-            self.filterForce = self.filter(self.observerForce, self.filterForce, cutoffFreq=self.guiNode.cutoffForceFreq.value)
-        else:
-            self.observerState = self.A @ self.observerState + self.B @ cmd + self.L_state @ (self.filterMeasure - self.observerOutput)
+            self.filterPerturbation = self.filter(self.observer.state[self.nb_state:self.nb_state+1], self.filterPerturbation, cutoffFreq=0.01*self.guiNode.cutoffPerturbationFreq.value)
+            self.filterForce = self.filter(self.observer.state[self.nb_state+1:], self.filterForce, cutoffFreq=self.guiNode.cutoffForceFreq.value)
 
 
     def compute_command(self):
         if self.controller_type == "state_feedback_integral":
-            desiredMotorPos = (-self.K_state @ self.observerState - self.K_int @ self.integral).flatten()
-            self.integral += self.reference_pos - self.filterMeasure[[1]]
+            self.controller.update(self.observer.state[:self.nb_state], self.reference_pos, self.filterMeasure[[1]])
         elif self.controller_type == "state_feedback" and "perturbation" in self.observer_type:
-            desiredMotorPos = ( self.G @ self.reference_pos - self.K_state @ self.observerState - self.filterPerturbation).flatten()
+            self.controller.command -= self.filterPerturbation
         else:
-            desiredMotorPos = ( self.G @ self.reference_pos - self.K_state @ self.observerState).flatten()
+            self.controller.update(self.observer.state[:self.nb_state], self.reference_pos)
+        desiredMotorPos = self.controller.command.flatten()
         return desiredMotorPos[0]
 
 

@@ -37,7 +37,7 @@ def design_integral_controller(A, B, C):
     if C_ctr.shape[0] != B.shape[1]:
         raise ValueError(f"Controlled output must have the same dimension as the input. Got {C_ctr.shape[0]} controlled outputs and {B.shape[1]} inputs.")
 
-    Q = np.block([[C.T @ (1e-1 * np.eye(C.shape[0])) @ C, np.zeros((A.shape[0], B.shape[1]))],
+    Q = np.block([[C.T @ (1e-0 * np.eye(C.shape[0])) @ C, np.zeros((A.shape[0], B.shape[1]))],
                   [np.zeros((B.shape[1], A.shape[0])), 1e-2 * np.eye(B.shape[1])]])
     R = 1e3 * np.eye(B.shape[1])
     K, _, _ = ct.dlqr(Abar, Bbar, Q, R)

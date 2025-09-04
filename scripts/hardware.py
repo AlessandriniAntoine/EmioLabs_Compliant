@@ -276,11 +276,11 @@ def processController(trackerPos, sharedMotorPos, sharedRefPos, sharedStart, sha
     C = dataModel["outputMatrix"]
 
     dataCl = np.load(controlPath)
-    K = dataCl["feedbackGain"]
-    G = dataCl["feedForwardGain"]
+    K = dataCl["statefeedbackGain"]
+    G = dataCl["feedforwardGain"]
 
     dataObs = np.load(observerPath)
-    L = dataObs["observerGain"]
+    L = dataObs["stateGain"]
     observerState = np.zeros((2*order, 1))
 
     # Initialize variables

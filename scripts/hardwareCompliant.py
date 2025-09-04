@@ -9,6 +9,8 @@ import cv2 as cv
 from emioapi import EmioMotors
 from emioapi._depthcamera import DepthCamera
 
+from utils import Observer, StateFeedbackIntegral
+
 lab_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 data_path = os.path.join(lab_path, "data")
 
@@ -239,14 +241,13 @@ def processSlider(sharedMotorPos, sharedRefPos,
 def processController(trackerPos, sharedMotorPos, sharedRefPos, sharedStart, sharedControlMode, sharedRecord, sharedSave, event):
 
     dt = 1/60
-    m = np.array([[0.5]])
-    d = np.array([[20]])
-    s = np.array([[10]])
+    m = np.array([[0.1]])
+    d = np.array([[10]])
+    s = np.array([[100]])
     alpha = np.linalg.inv(m + dt * d + dt**2 * s)
     A_ref = np.block([[alpha @ m, -dt * alpha @ s], [dt * alpha @ m, np.eye(1) - (dt**2) * alpha * s]])
     E_ref = np.block([[dt * alpha], [(dt**2) * alpha]])
     B_ref = np.block([[dt*alpha@s], [(dt**2)*alpha@s]])
-
 
     args = arg_parse()
     motors = EmioMotors()
@@ -270,44 +271,21 @@ def processController(trackerPos, sharedMotorPos, sharedRefPos, sharedStart, sha
 
     # control data
     order = int(args.order)
-    modelPath = os.path.join(data_path, f"model_order{order}.npz")
-    controlPath = os.path.join(data_path, f"controller_order{order}.npz")
-    observerPath = os.path.join(data_path, f"observer_order{order}.npz")
-    if not os.path.exists(modelPath):
-        raise FileNotFoundError(f"Model data file {modelPath} does not exist. Please run the identification script first.")
-    if not os.path.exists(controlPath):
-        raise FileNotFoundError(f"Closed loop data file {controlPath} does not exist. Please run the controller script first.")
-    if not os.path.exists(observerPath):
-        raise FileNotFoundError(f"Observer data file {observerPath} does not exist. Please run the observer script first.")
 
-    dataModel = np.load(modelPath)
-    A = dataModel["stateMatrix"]
-    B = dataModel["inputMatrix"]
-    E = dataModel["forceMatrix"]
-    C = dataModel["outputMatrix"]
-
-    dataCl = np.load(controlPath)
-    K_state = dataCl["statefeedbackGain"]
-    K_int = dataCl["integralfeedbackGain"]
-    integral = np.zeros((K_int.shape[1], 1))
-    # G = dataCl["feedForwardGain"]
-
-    dataObs = np.load(observerPath)
-    L_state = dataObs["stateGain"]
-    L_force = dataObs["forceGain"]
-    observerState = np.zeros((A.shape[0], 1))
-    observerForce = np.zeros((E.shape[1], 1))
-    force_filter = np.zeros((E.shape[1], 1))
+    controller = StateFeedbackIntegral(os.path.join(data_path, f"controller_order{order}.npz"))
+    observer = Observer(os.path.join(data_path, f"observer_order{order}_default.npz"))
+    observer_force = Observer(os.path.join(data_path, f"observer_order{order}_force.npz"))
+    force_filter = np.zeros((observer.B.shape[1], 1))
 
     # Initialize variables
     initialMarkersPos = np.zeros((3*nbMarkers, ))
     measureFiltered = np.zeros((3*nbMarkers, ))
     markersPosPrev = np.zeros((3*nbMarkers, ))
-    motorPos = np.zeros((B.shape[1],))
-    motorPosPrev = np.zeros((B.shape[1],))
-    currentMotorPos = np.zeros((B.shape[1],))
-    reference_pos = np.zeros((2*B.shape[1],1))
-    desired_pos = np.zeros((B.shape[1],1))
+    motorPos = np.zeros((observer.B.shape[1],))
+    motorPosPrev = np.zeros((observer.B.shape[1],))
+    currentMotorPos = np.zeros((observer.B.shape[1],))
+    reference_pos = np.zeros((2*observer.B.shape[1],1))
+    desired_pos = np.zeros((observer.B.shape[1],1))
 
     # recorded data
     markersPositions = []
@@ -362,24 +340,18 @@ def processController(trackerPos, sharedMotorPos, sharedRefPos, sharedStart, sha
 
             # observer update
             cmd = np.array([currentMotorPos]).reshape(-1, 1)
-            observerOutput = C @ observerState
-            observerState = A @ observerState + B @ cmd + E @ observerForce + L_state @ (outputPrev - observerOutput)
-            observerForce = observerForce + L_force @ (output - observerOutput)
-            force_filter = filterFirstOder(observerForce, force_filter, cutoffFreq=1.)
-            print(f"force: {force_filter[0,0]/9.81} (g)")
-
+            observer.update(cmd, outputPrev)
+            observer_force.update(cmd, outputPrev)
+            force_filter = filterFirstOder(observer_force.state[2*order:], force_filter, cutoffFreq=60.)
             desired_pos = np.array([sharedRefPos[:]]).reshape(-1, 1)
 
             if sharedControlMode.value == ControlMode["Open Loop"]:
                 with sharedMotorPos.get_lock():
                     command = np.array(sharedMotorPos[:])
             else:
-                command = - K_state @ observerState - K_int @ integral
-                command = command.flatten()
-                reference_pos = A_ref @ reference_pos + B_ref @ desired_pos + E_ref @ observerForce
-                integral += (reference_pos[[1]] - output[[1]])
-                print(f"Reference Position: {reference_pos[1, 0]} (mm)")
-                # print(f"Command: {command}")
+                controller.update(observer.state, reference_pos[[1]], output[[1]])
+                command = controller.command.flatten()
+                reference_pos = A_ref @ reference_pos + B_ref @ desired_pos + E_ref @ force_filter
 
             # apply the motor position
             motorPos = filterFirstOder(command, motorPos, cutoffFreq=cutoffFreqMotor, samplingFreq=samplingFreq)

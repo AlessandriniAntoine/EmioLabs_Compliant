@@ -1,4 +1,5 @@
 from .closedLoopController import *
+from .utils import Observer
 
 
 ControlMode = {"Open Loop": False, "State Feedback": True}
@@ -6,12 +7,12 @@ ControlMode = {"Open Loop": False, "State Feedback": True}
 
 class CompliantController(ClosedLoopController):
     def __init__(self, leg, motor, markers, load, motorInit, motorMin, motorMax, cutoffFreq, order, controller_type, observer_type, mass, damping, stiffness):
-        super().__init__(leg, motor, markers, load, motorInit, motorMin, motorMax, cutoffFreq, order, controller_type, observer_type)
+        super().__init__(leg, motor, markers, load, motorInit, motorMin, motorMax, cutoffFreq, order, controller_type, "default")
 
-        self.setup_compliant_variables(mass, damping, stiffness)
+        self.setup_compliant_variables(mass, damping, stiffness, order)
         self.setup_compliant_gui()
 
-    def setup_compliant_variables(self, mass, damping, stiffness):
+    def setup_compliant_variables(self, mass, damping, stiffness, order):
         self.mass = mass
         self.damping = damping
         self.stiffness = stiffness
@@ -20,8 +21,11 @@ class CompliantController(ClosedLoopController):
         self.stiffness_exponant=int(np.floor(np.log10(abs(self.stiffness))))-1
         self.compute_state_matrix()
 
-        self.desired_pos = np.zeros((self.B.shape[1], 1))
+        self.desired_pos = np.zeros((self.observer.B.shape[1], 1))
         self.reference_state = np.zeros((2, 1))
+
+        self.observer_force = Observer(os.path.join(data_path, f"observer_order{order}_force.npz"))
+        self.filterForce = np.zeros((self.observer.B.shape[1], 1))
 
 
     def setup_compliant_gui(self):
@@ -38,6 +42,12 @@ class CompliantController(ClosedLoopController):
         MyGui.MyRobotWindow.addSettingInGroup("Update", self.guiNode.update, 0, 1, "Reference System")
 
         MyGui.PlottingWindow.addData("Desired pos (mm)", self.guiNode.desired_pos)
+
+        self.guiNode.addData(name="observerForce", type="float", value=0.)
+        self.guiNode.addData(name="cutoffForceFreq", type="float", value=600.)
+        MyGui.MyRobotWindow.addSettingInGroup("Force (0.1Hz)", self.guiNode.cutoffForceFreq, 0, 1000, "Cutoff Frequency")
+        MyGui.PlottingWindow.addData("Force (g)", self.guiNode.force)
+        MyGui.PlottingWindow.addData("Force obs (g)", self.guiNode.observerForce)
 
 
     def compute_state_matrix(self):
@@ -56,6 +66,8 @@ class CompliantController(ClosedLoopController):
         # observer
         cmd = self.currentMotorPos.reshape(-1, 1)
         self.update_observer(cmd)
+        self.observer_force.update(cmd, self.filterMeasure)
+        self.filterForce = self.filter(self.observer_force.state[self.nb_state:], self.filterForce, cutoffFreq=self.guiNode.cutoffForceFreq.value)
         self.measurePrev = self.markersPos.copy()
 
         if self.guiNode.active.value:
@@ -79,10 +91,10 @@ class CompliantController(ClosedLoopController):
         self.desired_pos = np.array([[self.guiNode.desired_pos.value]])
         self.reference_state = self.A_ref @ self.reference_state + self.B_ref @ self.desired_pos + self.E_ref @ self.filterForce
 
-
     def execute_control_at_simu_frame(self):
         super().execute_control_at_simu_frame()
         self.guiNode.reference_pos.value = self.reference_pos[0, 0]
+        self.guiNode.observerForce.value = self.filterForce[0, 0] / 9.81
         if self.guiNode.update.value:
             self.mass = self.guiNode.mass.value*(10**self.mass_exponant)
             self.damping = self.guiNode.damping.value*(10**self.damping_exponant)

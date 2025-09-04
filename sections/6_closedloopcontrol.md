@@ -52,6 +52,7 @@ Init, Min, Max (rad)
 
 :::::: highlight
 5. Select the controller type:
+#open-button("assets/labs/EmioLabs_Compliant/scripts/controller.py")
 ::::: group-grid {style="grid-template-rows:repeat(2, 0fr);"}
 **Controller type**
 :::: select controller_type
@@ -64,6 +65,7 @@ Init, Min, Max (rad)
 
 :::::: highlight
 6. Select the observer type:
+#open-button("assets/labs/EmioLabs_Compliant/scripts/observer.py")
 ::::: group-grid {style="grid-template-rows:repeat(2, 0fr);"}
 **Observer type**
 :::: select observer_type
