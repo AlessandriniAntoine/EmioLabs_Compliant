@@ -241,9 +241,9 @@ def processSlider(sharedMotorPos, sharedRefPos,
 def processController(trackerPos, sharedMotorPos, sharedRefPos, sharedStart, sharedControlMode, sharedRecord, sharedSave, event):
 
     dt = 1/60
-    m = np.array([[0.1]])
-    d = np.array([[10]])
-    s = np.array([[100]])
+    m = np.array([[0.05]])
+    d = np.array([[1]])
+    s = np.array([[13]])
     alpha = np.linalg.inv(m + dt * d + dt**2 * s)
     A_ref = np.block([[alpha @ m, -dt * alpha @ s], [dt * alpha @ m, np.eye(1) - (dt**2) * alpha * s]])
     E_ref = np.block([[dt * alpha], [(dt**2) * alpha]])
@@ -343,11 +343,13 @@ def processController(trackerPos, sharedMotorPos, sharedRefPos, sharedStart, sha
             observer.update(cmd, outputPrev)
             observer_force.update(cmd, outputPrev)
             force_filter = filterFirstOder(observer_force.state[2*order:], force_filter, cutoffFreq=60.)
+            print(f"force_filter: {force_filter.flatten()/9.81} (g) measure: {output[[1]]} (mm)")
             desired_pos = np.array([sharedRefPos[:]]).reshape(-1, 1)
 
             if sharedControlMode.value == ControlMode["Open Loop"]:
                 with sharedMotorPos.get_lock():
                     command = np.array(sharedMotorPos[:])
+                controller.integral = np.zeros_like(controller.integral)
             else:
                 controller.update(observer.state, reference_pos[[1]], output[[1]])
                 command = controller.command.flatten()

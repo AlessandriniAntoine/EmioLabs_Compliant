@@ -116,7 +116,7 @@ def design_observer(A, B, C, order):
         raise ValueError(f"System is not observable: rank {obsv_rank}, expected {A.shape[0]}.")
 
     Q = np.diag(A.shape[0] * [1e2])
-    R = 1e2 * np.eye(C.shape[0])
+    R = 5e1 * np.eye(C.shape[0])
     Lt, _, _ =  ct.dlqr(A.T, C.T, Q, R)
     L = Lt.T
 
